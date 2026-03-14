@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-final class GeolocationHandler: NSObject, NativeHandler, CLLocationManagerDelegate {
+final class GeolocationHandler: NSObject, AsyncHandler, CLLocationManagerDelegate {
     let namespace = "geolocation"
 
     var onAsyncCallback: ((String, Any?) -> Void)?
@@ -14,14 +14,32 @@ final class GeolocationHandler: NSObject, NativeHandler, CLLocationManagerDelega
     }()
 
     private var pendingCallbackRef: String?
+    private var watchCallbackRef: String?
+    private var isWatching = false
 
     func handle(method: String, args: [String: Any]) -> Any? {
         switch method {
         case "getCurrentPosition":
             let ref = args["_callbackRef"] as? String
             pendingCallbackRef = ref
+            dbg.log("Geolocation", "getCurrentPosition, ref=\(ref ?? "nil")")
             locationManager.requestLocation()
             return ["status": "locating"]
+
+        case "watchPosition":
+            let ref = args["_callbackRef"] as? String
+            watchCallbackRef = ref
+            isWatching = true
+            dbg.log("Geolocation", "watchPosition started, ref=\(ref ?? "nil")")
+            locationManager.startUpdatingLocation()
+            return ["status": "watching"]
+
+        case "stopWatching":
+            isWatching = false
+            watchCallbackRef = nil
+            locationManager.stopUpdatingLocation()
+            dbg.log("Geolocation", "stopWatching")
+            return ["status": "stopped"]
 
         case "requestPermission":
             let ref = args["_callbackRef"] as? String
@@ -49,23 +67,39 @@ final class GeolocationHandler: NSObject, NativeHandler, CLLocationManagerDelega
     // MARK: - CLLocationManagerDelegate
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last, let ref = pendingCallbackRef else { return }
-        pendingCallbackRef = nil
+        guard let location = locations.last else { return }
 
-        onAsyncCallback?(ref, [
+        let data: [String: Any] = [
             "latitude": location.coordinate.latitude,
             "longitude": location.coordinate.longitude,
             "altitude": location.altitude,
             "accuracy": location.horizontalAccuracy,
+            "speed": location.speed,
+            "heading": location.course,
             "timestamp": location.timestamp.timeIntervalSince1970
-        ])
+        ]
+
+        // One-time request
+        if let ref = pendingCallbackRef {
+            pendingCallbackRef = nil
+            onAsyncCallback?(ref, data)
+        }
+
+        // Live tracking
+        if isWatching, let ref = watchCallbackRef {
+            onAsyncCallback?(ref, data)
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         dbg.error("Geolocation", "Location error: \(error.localizedDescription)")
-        guard let ref = pendingCallbackRef else { return }
-        pendingCallbackRef = nil
-        onAsyncCallback?(ref, ["error": error.localizedDescription])
+        if let ref = pendingCallbackRef {
+            pendingCallbackRef = nil
+            onAsyncCallback?(ref, ["error": error.localizedDescription])
+        }
+        if isWatching, let ref = watchCallbackRef {
+            onAsyncCallback?(ref, ["error": error.localizedDescription])
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
