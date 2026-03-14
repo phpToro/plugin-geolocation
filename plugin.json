@@ -11,6 +11,16 @@
                     "description": "This app needs your location"
                 }
             ]
+        },
+        "macos": {
+            "handlers": ["macos/GeolocationHandler.swift"],
+            "frameworks": ["CoreLocation"],
+            "permissions": [
+                {
+                    "key": "NSLocationUsageDescription",
+                    "description": "This app needs your location"
+                }
+            ]
         }
     },
     "js": ["js/geolocation.js"],
