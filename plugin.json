@@ -1,0 +1,20 @@
+{
+    "name": "Geolocation",
+    "namespace": "geolocation",
+    "platforms": {
+        "ios": {
+            "handlers": ["ios/GeolocationHandler.swift"],
+            "frameworks": ["CoreLocation"],
+            "permissions": [
+                {
+                    "key": "NSLocationWhenInUseUsageDescription",
+                    "description": "This app needs your location"
+                }
+            ]
+        }
+    },
+    "js": ["js/geolocation.js"],
+    "php": {
+        "files": ["php/Geolocation.php"]
+    }
+}
